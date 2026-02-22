@@ -1,118 +1,232 @@
-#ghostfinder_button {
-    cursor: pointer;
+/* CT-InstructionMessagesCount - Trigger Button */
+.ct-imc-trigger {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     opacity: 0.7;
-    transition: opacity 0.2s;
+    transition: opacity 200ms;
+    cursor: pointer;
+    anchor-name: --ct-imc-anchor;
+    order: 14;
 }
 
-#ghostfinder_button:hover {
+.ct-imc-trigger:hover {
     opacity: 1;
 }
 
-/* Sidebar styles */
-.ghostfinder_sidebar {
-    position: fixed;
-    left: -20rem;
-    top: 10vh;
-    width: 18rem;
-    max-height: 80vh;
-    background: var(--SmartThemeBlurTintColor);
-    border: 1px solid var(--SmartThemeBorderColor);
-    border-radius: 10px;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
-    transition: left 0.3s ease;
-    z-index: 4000;
-    display: flex;
-    flex-direction: column;
+/* Badge */
+.ct-imc-trigger::after {
+    content: attr(data-ct-imc-badge);
+    position: absolute;
+    bottom: -2px;
+    right: -2px;
+    font-size: 0.65em;
+    font-weight: bold;
+    font-family: var(--mainFontFamily);
+    color: white;
+    background: rgba(100, 100, 100, 1);
+    line-height: 1;
+    padding: 0.25em 0.4em;
+    border-radius: 1em;
+    min-width: 1.2em;
+    text-align: center;
+    pointer-events: none;
+    transition: 200ms;
+    white-space: nowrap;
+}
+
+.ct-imc-trigger:hover::after {
+    opacity: 1;
+}
+
+/* Panel */
+.ct-imc-panel {
+    filter: drop-shadow(1px 1px 2px var(--black50a));
+    z-index: 30000;
     overflow: hidden;
-    color: var(--SmartThemeQuoteColor);
-    pointer-events: auto;
-    will-change: left;
+    border-radius: 10px;
+    padding: 0;
+    display: none;
+    flex-direction: column;
+    font-size: small;
+    max-height: 60vh;
+    width: 400px;
+    max-width: 90vw;
+    background-color: var(--secondaryBg, var(--SmartThemeBlurTintColor));
+    position: fixed;
+    position-anchor: --ct-imc-anchor;
+    position-area: top span-right;
+    position-try-fallbacks: flip-block, flip-inline;
+    margin-bottom: 0.5em;
 }
 
-.ghostfinder_sidebar.ghostfinder_open {
-    left: 1rem;
+.ct-imc-panel.ct-imc-open {
+    display: flex;
 }
 
-.ghostfinder_sidebar_header {
+/* Header */
+.ct-imc-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 1rem;
+    padding: 0.6rem 0.75rem;
     border-bottom: 1px solid var(--SmartThemeBorderColor);
     flex-shrink: 0;
     background: var(--black30a);
 }
 
-.ghostfinder_sidebar_header h3 {
+.ct-imc-header h3 {
     margin: 0;
-    font-size: 1.1rem;
+    font-size: 0.95rem;
     color: var(--SmartThemeQuoteColor);
     font-weight: 600;
 }
 
-.ghostfinder_sidebar_controls {
+.ct-imc-controls {
     display: flex;
-    gap: 0.75rem;
+    gap: 0.5rem;
     align-items: center;
 }
 
-#ghostfinder_sidebar_refresh,
-#ghostfinder_sidebar_close {
+.ct-imc-controls > div {
     cursor: pointer;
-    font-size: 1rem;
+    font-size: 0.9rem;
     opacity: 0.7;
     transition: opacity 0.2s, color 0.2s;
     color: var(--SmartThemeQuoteColor);
 }
 
-#ghostfinder_sidebar_refresh:hover,
-#ghostfinder_sidebar_close:hover {
+.ct-imc-controls > div:hover {
     opacity: 1;
 }
 
-#ghostfinder_sidebar_refresh:hover {
+#ct_imc_force_hide:hover {
     color: var(--SmartThemeQuoteColor);
 }
 
-#ghostfinder_sidebar_close:hover {
+#ct_imc_close:hover {
     color: var(--crimson70a);
 }
 
-.ghostfinder_sidebar_list {
-    padding: 0.5rem;
+/* List */
+.ct-imc-list {
+    padding: 0.4rem;
     overflow-y: auto;
     flex: 1;
 }
 
-.ghostfinder_boundary_item {
+.ct-imc-empty {
     padding: 0.75rem;
-    margin: 0.25rem 0;
-    cursor: pointer;
-    border-radius: 5px;
-    background: var(--black50a);
-    transition: background 0.2s, opacity 0.2s;
-    text-align: center;
-    color: var(--SmartThemeQuoteColor);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.5rem;
-}
-
-.ghostfinder_boundary_item:hover {
-    background: var(--SmartThemeBorderColor);
-    opacity: 0.9;
-}
-
-.ghostfinder_ghost_icon {
-    font-size: 0.9rem;
-    opacity: 0.8;
-}
-
-.ghostfinder_no_boundaries {
-    padding: 1rem;
     text-align: center;
     opacity: 0.6;
     font-style: italic;
     color: var(--SmartThemeQuoteColor);
+    font-size: 0.85em;
+}
+
+/* List Item */
+.ct-imc-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 0.6rem;
+    margin: 0.2rem 0;
+    cursor: pointer;
+    border-radius: 4px;
+    background: var(--black50a);
+    transition: background 0.2s, opacity 0.2s;
+    gap: 0.4rem;
+}
+
+.ct-imc-item:hover {
+    background: var(--SmartThemeBorderColor);
+}
+
+.ct-imc-item.ct-imc-hidden {
+    opacity: 0.5;
+}
+
+.ct-imc-item.ct-imc-hidden .ct-imc-message-number {
+    text-decoration: line-through;
+}
+
+/* Message Info */
+.ct-imc-message-info {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    min-width: 0;
+}
+
+.ct-imc-message-number {
+    font-weight: bold;
+    color: var(--SmartThemeQuoteColor);
+    flex-shrink: 0;
+    font-size: 0.85em;
+}
+
+.ct-imc-message-preview {
+    color: var(--SmartThemeQuoteColor);
+    opacity: 0.8;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 0.8em;
+    line-height: 1.3;
+}
+
+/* Actions */
+.ct-imc-actions {
+    display: flex;
+    gap: 0.35rem;
+    flex-shrink: 0;
+}
+
+.ct-imc-btn {
+    cursor: pointer;
+    padding: 0.3rem;
+    border-radius: 3px;
+    background: var(--black30a);
+    transition: background 0.2s, color 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.6rem;
+    height: 1.6rem;
+    font-size: 0.85em;
+}
+
+.ct-imc-btn:hover {
+    background: var(--SmartThemeBorderColor);
+}
+
+.ct-imc-keep-btn.ct-imc-kept {
+    background: var(--SmartThemeQuoteColor);
+    color: var(--SmartThemeBlurTintColor);
+}
+
+.ct-imc-keep-btn.ct-imc-kept:hover {
+    opacity: 0.8;
+}
+
+/* Highlight animation for navigation */
+.ct-imc-highlight {
+    animation: ct-imc-highlight-pulse 2s ease-out;
+}
+
+@keyframes ct-imc-highlight-pulse {
+    0% {
+        background-color: var(--SmartThemeQuoteColor);
+        opacity: 0.3;
+    }
+    50% {
+        background-color: var(--SmartThemeQuoteColor);
+        opacity: 0.6;
+    }
+    100% {
+        background-color: transparent;
+        opacity: 1;
+    }
 }

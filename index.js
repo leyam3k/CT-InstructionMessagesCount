@@ -1,401 +1,445 @@
 import { extension_settings, getContext } from "../../../extensions.js";
-import { saveSettingsDebounced, eventSource, event_types } from "../../../../script.js";
+import { saveSettingsDebounced, eventSource, event_types, chat_metadata, saveChatConditional } from "../../../../script.js";
 
-const extensionName = "SillyTavern-Ghostfinder";
-const extensionFolderPath = `scripts/extensions/third-party/${extensionName}`;
-const extensionDisplayName = "Ghostfinder";
-
-// Helper for debug logging
-function log(...args) {
-    if (extension_settings[extensionName]?.debugMode) {
-        console.log(`[${extensionDisplayName}]`, ...args);
-    }
-}
-
-// Helper for regular logging
-function info(...args) {
-    console.log(`[${extensionDisplayName}]`, ...args);
-}
+const MODULE_NAME = 'CT-InstructionMessagesCount';
+const extensionFolderPath = `scripts/extensions/third-party/${MODULE_NAME}`;
 
 // Default settings
-const defaultSettings = { 
-    enabled: true,
-    showIndex: false,
-    findEnd: false,
-    debugMode: false
+const defaultSettings = {
+    autoHide: false,
+    keptInstructions: {} // Per-chat storage: { chatId: { messageHash: true } }
 };
 
-// Initialize settings
+// Load settings
 function loadSettings() {
-    // Initialize with defaults if doesn't exist
-    if (!extension_settings[extensionName]) {
-        extension_settings[extensionName] = structuredClone(defaultSettings);
+    if (!extension_settings[MODULE_NAME]) {
+        extension_settings[MODULE_NAME] = structuredClone(defaultSettings);
     }
     
-    // Ensure all settings exist
-    if (extension_settings[extensionName].enabled === undefined) {
-        extension_settings[extensionName].enabled = true;
+    // Ensure keptInstructions exists
+    if (!extension_settings[MODULE_NAME].keptInstructions) {
+        extension_settings[MODULE_NAME].keptInstructions = {};
     }
     
-    if (extension_settings[extensionName].showIndex === undefined) {
-        extension_settings[extensionName].showIndex = false;
+    // Update UI
+    const autoHideCheckbox = document.querySelector('#ct_imc_auto_hide');
+    if (autoHideCheckbox) {
+        autoHideCheckbox.checked = extension_settings[MODULE_NAME].autoHide || false;
     }
-    
-    if (extension_settings[extensionName].findEnd === undefined) {
-        extension_settings[extensionName].findEnd = false;
-    }
-    
-    if (extension_settings[extensionName].debugMode === undefined) {
-        extension_settings[extensionName].debugMode = false;
-    }
-    
-    // Update UI if it exists
-    const enabledCheckbox = document.querySelector('#ghostfinder_enabled');
-    if (enabledCheckbox) {
-        enabledCheckbox.checked = extension_settings[extensionName].enabled;
-    }
-    
-    const showIndexCheckbox = document.querySelector('#ghostfinder_show_index');
-    if (showIndexCheckbox) {
-        showIndexCheckbox.checked = extension_settings[extensionName].showIndex;
-    }
-    
-    const findEndCheckbox = document.querySelector('#ghostfinder_find_end');
-    if (findEndCheckbox) {
-        findEndCheckbox.checked = extension_settings[extensionName].findEnd;
-    }
-    
-    const debugCheckbox = document.querySelector('#ghostfinder_debug');
-    if (debugCheckbox) {
-        debugCheckbox.checked = extension_settings[extensionName].debugMode;
-    }
-    
-    log("Settings loaded:", extension_settings[extensionName]);
 }
 
-// Find ALL boundary messages from context.chat (includes unloaded)
-function findAllBoundaries() {
+// Generate unique hash for a message to track it across message deletions
+function getMessageHash(message) {
+    if (!message) return null;
+    // Use message content + timestamp as unique identifier
+    const content = message.mes || '';
+    const timestamp = message.send_date || Date.now();
+    return `${content.substring(0, 50)}_${timestamp}`;
+}
+
+// Get current chat ID
+function getCurrentChatId() {
+    const context = getContext();
+    return context.chatId || 'default';
+}
+
+// Check if instruction is kept
+function isInstructionKept(message) {
+    const chatId = getCurrentChatId();
+    const hash = getMessageHash(message);
+    if (!hash) return false;
+    
+    const keptInstructions = extension_settings[MODULE_NAME].keptInstructions[chatId] || {};
+    return keptInstructions[hash] === true;
+}
+
+// Toggle kept status
+function toggleKeepInstruction(message) {
+    const chatId = getCurrentChatId();
+    const hash = getMessageHash(message);
+    if (!hash) return;
+    
+    if (!extension_settings[MODULE_NAME].keptInstructions[chatId]) {
+        extension_settings[MODULE_NAME].keptInstructions[chatId] = {};
+    }
+    
+    const keptInstructions = extension_settings[MODULE_NAME].keptInstructions[chatId];
+    
+    if (keptInstructions[hash]) {
+        delete keptInstructions[hash];
+    } else {
+        keptInstructions[hash] = true;
+    }
+    
+    saveSettingsDebounced();
+}
+
+// Find all instruction messages
+function findInstructionMessages() {
     const context = getContext();
     const allMessages = context.chat || [];
-    const boundaries = [];
-    const findEnd = extension_settings[extensionName].findEnd;
-    let lastWasHidden = false;
+    const instructions = [];
     
     for (let i = 0; i < allMessages.length; i++) {
         const msg = allMessages[i];
-        const isHidden = msg.is_system === true;
+        const chName = msg.name || '';
         
-        if (findEnd) {
-            // Find LAST unhidden before hidden section (end of boundary)
-            if (isHidden && !lastWasHidden && i > 0) {
-                boundaries.push(i - 1);
-            }
-        } else {
-            // Find FIRST unhidden after hidden section (start of boundary)
-            if (!isHidden && lastWasHidden) {
-                boundaries.push(i);
-            }
+        // Check if message name is "Instruction" (case-insensitive)
+        if (chName.toLowerCase() === 'instruction') {
+            const isHidden = msg.is_system === true;
+            const isKept = isInstructionKept(msg);
+            
+            instructions.push({
+                index: i,
+                message: msg,
+                isHidden: isHidden,
+                isKept: isKept,
+                content: msg.mes || ''
+            });
         }
-        
-        lastWasHidden = isHidden;
     }
     
-    log(`Found ${boundaries.length} boundaries (${findEnd ? 'ends' : 'starts'}):`, boundaries);
-    return boundaries;
+    return instructions;
 }
 
-// Find the next boundary before current scroll position
-function findNextBoundary() {
-    const boundaries = findAllBoundaries();
-    
-    if (boundaries.length === 0) {
-        return null;
-    }
-    
-    const scrollTop = $('#chat').scrollTop();
-    const chatTop = $('#chat').offset().top;
-    
-    let currentMesId = null;
-    $('#chat .mes').each(function() {
-        const messageTop = $(this).offset().top - chatTop + scrollTop;
-        if (messageTop >= scrollTop - 10) {
-            currentMesId = parseInt($(this).attr('mesid'));
-            return false;
-        }
-    });
-    
-    if (currentMesId === null) {
-        return boundaries[boundaries.length - 1];
-    }
-    
-    for (let i = boundaries.length - 1; i >= 0; i--) {
-        if (boundaries[i] < currentMesId) {
-            return boundaries[i];
-        }
-    }
-    
-    return null;
+// Get second to last message index
+function getSecondToLastMessageIndex() {
+    const context = getContext();
+    const allMessages = context.chat || [];
+    return Math.max(0, allMessages.length - 2);
 }
 
-// Jump to a specific boundary message
-function jumpToBoundary(mesId) {
-    if (mesId === null || mesId === undefined) {
-        toastr.info('No boundary found', extensionDisplayName);
-        return;
+// Auto-hide instructions that are no longer second to last
+async function autoHideInstructions() {
+    if (!extension_settings[MODULE_NAME].autoHide) return;
+    
+    const instructions = findInstructionMessages();
+    const secondToLastIndex = getSecondToLastMessageIndex();
+    let hiddenCount = 0;
+    
+    for (const inst of instructions) {
+        // Skip if kept
+        if (inst.isKept) continue;
+        
+        // Skip if already hidden
+        if (inst.isHidden) continue;
+        
+        // Hide if not at least second to last
+        if (inst.index < secondToLastIndex) {
+            inst.message.is_system = true;
+            
+            // Update DOM
+            const messageBlock = $(`.mes[mesid="${inst.index}"]`);
+            if (messageBlock.length) {
+                messageBlock.attr('is_system', 'true');
+            }
+            
+            hiddenCount++;
+        }
     }
     
-    const targetElement = $(`.mes[mesid="${mesId}"]`);
+    if (hiddenCount > 0) {
+        await saveChatConditional();
+    }
+}
+
+// Force hide all non-kept instructions that are not second to last
+async function forceHideInstructions() {
+    const instructions = findInstructionMessages();
+    const secondToLastIndex = getSecondToLastMessageIndex();
+    let hiddenCount = 0;
+    
+    for (const inst of instructions) {
+        // Skip if kept
+        if (inst.isKept) continue;
+        
+        // Skip if already hidden
+        if (inst.isHidden) continue;
+        
+        // Hide if not at least second to last
+        if (inst.index < secondToLastIndex) {
+            inst.message.is_system = true;
+            
+            // Update DOM
+            const messageBlock = $(`.mes[mesid="${inst.index}"]`);
+            if (messageBlock.length) {
+                messageBlock.attr('is_system', 'true');
+            }
+            
+            hiddenCount++;
+        }
+    }
+    
+    if (hiddenCount > 0) {
+        await saveChatConditional();
+        toastr.success(`Hidden ${hiddenCount} instruction message(s)`, MODULE_NAME);
+    } else {
+        toastr.info('No instructions to hide', MODULE_NAME);
+    }
+    
+    updatePanel();
+}
+
+// Navigate to instruction message
+function navigateToInstruction(messageIndex) {
+    const targetElement = $(`.mes[mesid="${messageIndex}"]`);
     
     if (targetElement.length > 0) {
-        targetElement[0].scrollIntoView({ behavior: 'smooth', block: 'start' });
-        toastr.success(`Jumped to message #${mesId}`, extensionDisplayName);
-        log(`Jumped to message #${mesId}`);
+        targetElement[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+        
+        // Highlight briefly
+        targetElement.addClass('ct-imc-highlight');
+        setTimeout(() => {
+            targetElement.removeClass('ct-imc-highlight');
+        }, 2000);
     } else {
-        // Message not loaded - scroll to top to load more messages
+        // Message not loaded
         $('#chat').animate({ scrollTop: 0 }, 'smooth');
-        toastr.info(`Message #${mesId} not loaded. Scrolled to top - click "Show More Messages" to load earlier messages.`, extensionDisplayName);
-        log(`Message #${mesId} not loaded, scrolled to top`);
+        toastr.info(`Message #${messageIndex} not loaded. Scroll to top and click "Show More Messages"`, MODULE_NAME);
     }
 }
 
-// Update the sidebar panel with boundary list
-function updateSidebarPanel() {
-    const boundaries = findAllBoundaries();
-    const listContainer = $('#ghostfinder_sidebar_list');
+// Toggle keep status and update UI
+async function handleKeepToggle(messageIndex) {
+    const context = getContext();
+    const message = context.chat[messageIndex];
     
-    if (listContainer.length === 0) {
-        log("Sidebar list container not found");
-        return;
+    if (!message) return;
+    
+    toggleKeepInstruction(message);
+    
+    // If kept and hidden, unhide it
+    const isKept = isInstructionKept(message);
+    if (isKept && message.is_system === true) {
+        message.is_system = false;
+        
+        const messageBlock = $(`.mes[mesid="${messageIndex}"]`);
+        if (messageBlock.length) {
+            messageBlock.attr('is_system', 'false');
+        }
+        
+        await saveChatConditional();
     }
+    
+    updatePanel();
+}
+
+// Update counter badge
+function updateCounterBadge() {
+    const instructions = findInstructionMessages();
+    const activeCount = instructions.filter(i => !i.isHidden).length;
+    const totalCount = instructions.length;
+    
+    const trigger = $('#ct_imc_trigger');
+    if (trigger.length) {
+        const badgeText = `${activeCount}/${totalCount}`;
+        trigger.attr('data-ct-imc-badge', badgeText);
+        
+        // Update tooltip
+        trigger.attr('title', `Instruction Messages: ${activeCount} active / ${totalCount} total`);
+    }
+}
+
+// Update panel content
+function updatePanel() {
+    const listContainer = $('#ct_imc_list');
+    if (listContainer.length === 0) return;
     
     listContainer.empty();
     
-    if (boundaries.length === 0) {
-        listContainer.append('<div class="ghostfinder_no_boundaries">No boundaries found</div>');
-        log("No boundaries found");
+    const instructions = findInstructionMessages();
+    
+    if (instructions.length === 0) {
+        listContainer.append('<div class="ct-imc-empty">No instruction messages found</div>');
+        updateCounterBadge();
         return;
     }
     
-    log(`Updating sidebar with ${boundaries.length} boundaries`);
-    
-    boundaries.forEach(mesId => {
-        const item = $('<div class="ghostfinder_boundary_item menu_button"></div>');
-        const ghostIcon = $('<i class="fa-solid fa-ghost ghostfinder_ghost_icon"></i>');
-        const text = $('<span></span>').text(`Message #${mesId}`);
+    instructions.forEach(inst => {
+        const item = $('<div class="ct-imc-item"></div>');
+        if (inst.isHidden) {
+            item.addClass('ct-imc-hidden');
+        }
         
-        item.append(ghostIcon).append(text);
-        item.on('click', () => jumpToBoundary(mesId));
+        // Message number and preview
+        const preview = inst.content.substring(0, 60) + (inst.content.length > 60 ? '...' : '');
+        const messageInfo = $(`
+            <div class="ct-imc-message-info">
+                <div class="ct-imc-message-number">#${inst.index}</div>
+                <div class="ct-imc-message-preview" title="${inst.content}">${preview}</div>
+            </div>
+        `);
+        
+        // Action buttons
+        const actions = $('<div class="ct-imc-actions"></div>');
+        
+        // Keep button
+        const keepBtn = $(`
+            <div class="ct-imc-btn ct-imc-keep-btn ${inst.isKept ? 'ct-imc-kept' : ''}" 
+                 title="${inst.isKept ? 'Unkeep instruction' : 'Keep instruction'}">
+                <i class="fa-solid fa-thumbtack"></i>
+            </div>
+        `);
+        keepBtn.on('click', (e) => {
+            e.stopPropagation();
+            handleKeepToggle(inst.index);
+        });
+        
+        // Navigate button
+        const navBtn = $(`
+            <div class="ct-imc-btn ct-imc-nav-btn" title="Navigate to message">
+                <i class="fa-solid fa-location-arrow"></i>
+            </div>
+        `);
+        navBtn.on('click', (e) => {
+            e.stopPropagation();
+            navigateToInstruction(inst.index);
+        });
+        
+        actions.append(keepBtn).append(navBtn);
+        item.append(messageInfo).append(actions);
+        
+        // Click on item to navigate
+        item.on('click', () => navigateToInstruction(inst.index));
+        
         listContainer.append(item);
+    });
+    
+    updateCounterBadge();
+}
+
+// Toggle panel
+function togglePanel() {
+    const panel = $('#ct_imc_panel');
+    
+    if (panel.hasClass('ct-imc-open')) {
+        panel.removeClass('ct-imc-open');
+    } else {
+        updatePanel();
+        panel.addClass('ct-imc-open');
+    }
+}
+
+// Close panel
+function closePanel() {
+    $('#ct_imc_panel').removeClass('ct-imc-open');
+}
+
+// Create trigger button
+function createTrigger() {
+    const leftSendForm = document.getElementById('leftSendForm');
+    if (!leftSendForm) return;
+    
+    // Remove existing
+    $('#ct_imc_trigger').remove();
+    
+    const trigger = $(`
+        <div id="ct_imc_trigger" class="ct-imc-trigger fa-solid fa-list-check interactable" 
+             title="Instruction Messages" 
+             tabindex="0" 
+             role="button"
+             data-ct-imc-badge="0/0">
+        </div>
+    `);
+    
+    trigger.on('click', togglePanel);
+    $(leftSendForm).append(trigger);
+    
+    updateCounterBadge();
+}
+
+// Create panel
+function createPanel() {
+    // Remove existing
+    $('#ct_imc_panel').remove();
+    
+    const panel = $(`
+        <div id="ct_imc_panel" class="ct-imc-panel">
+            <div class="ct-imc-header">
+                <h3>Instruction Messages</h3>
+                <div class="ct-imc-controls">
+                    <div id="ct_imc_force_hide" class="fa-solid fa-eye-slash interactable" 
+                         title="Force hide old instructions"></div>
+                    <div id="ct_imc_refresh" class="fa-solid fa-rotate interactable" 
+                         title="Refresh"></div>
+                    <div id="ct_imc_close" class="fa-solid fa-circle-xmark interactable" 
+                         title="Close"></div>
+                </div>
+            </div>
+            <div id="ct_imc_list" class="ct-imc-list"></div>
+        </div>
+    `);
+    
+    $('body').append(panel);
+    
+    $('#ct_imc_close').on('click', closePanel);
+    $('#ct_imc_refresh').on('click', updatePanel);
+    $('#ct_imc_force_hide').on('click', forceHideInstructions);
+    
+    // Close when clicking outside
+    $(document).on('click', (e) => {
+        if (!$(e.target).closest('#ct_imc_panel, #ct_imc_trigger').length) {
+            closePanel();
+        }
     });
 }
 
-// Toggle sidebar panel
-function toggleSidebar() {
-    const sidebar = $('#ghostfinder_sidebar');
-    
-    if (sidebar.hasClass('ghostfinder_open')) {
-        sidebar.removeClass('ghostfinder_open');
-        log("Sidebar closed");
-    } else {
-        updateSidebarPanel();
-        sidebar.addClass('ghostfinder_open');
-        log("Sidebar opened");
-    }
-}
-
-// Close sidebar
-function closeSidebar() {
-    $('#ghostfinder_sidebar').removeClass('ghostfinder_open');
-    log("Sidebar closed");
-}
-
-// Open sidebar panel (for Extensions menu button)
-function openSidebar() {
-    updateSidebarPanel();
-    $('#ghostfinder_sidebar').addClass('ghostfinder_open');
-    log("Sidebar opened from menu");
-}
-
-// Handle lantern button click
-function onLanternClick() {
-    log("Lantern button clicked");
-    
-    // If showIndex is enabled, toggle sidebar instead of jumping
-    if (extension_settings[extensionName].showIndex) {
-        toggleSidebar();
-    } else {
-        const nextBoundary = findNextBoundary();
-        jumpToBoundary(nextBoundary);
-    }
-}
-
-// Add Extensions menu button
-function addExtensionsMenuButton() {
-    // Remove existing button
-    $('#ghostfinder_menu_button').remove();
-    
-    // Select the Extensions dropdown menu
-    const $extensions_menu = $('#extensionsMenu');
-    if (!$extensions_menu.length) {
-        log("Extensions menu not found");
-        return;
-    }
-    
-    // Create button element
-    const $button = $(`
-        <div id="ghostfinder_menu_button" class="list-group-item flex-container flexGap5 interactable" title="Show Boundary Index" tabindex="0">
-            <i class="fa-solid fa-ghost"></i>
-            <span>Show Boundary Index</span>
-        </div>
-    `);
-    
-    // Append to extensions menu
-    $button.appendTo($extensions_menu);
-    
-    // Set click handler
-    $button.on('click', openSidebar);
-    
-    log("Menu button added to Extensions dropdown");
-}
-
-// Add lantern button to chat interface
-function addLanternButton() {
-    if (!extension_settings[extensionName].enabled) {
-        $('#ghostfinder_button').remove();
-        log("Lantern button removed (extension disabled)");
-        return;
-    }
-    
-    if ($('#ghostfinder_button').length > 0) {
-        log("Lantern button already exists");
-        return;
-    }
-    
-    const findEnd = extension_settings[extensionName].findEnd;
-    const tooltipText = findEnd ? 'Find last message before hidden sections' : 'Find previous boundary';
-    
-    const button = $(`
-        <div id="ghostfinder_button" class="interactable" title="${tooltipText}" tabindex="0" role="button">
-            <svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M12 2 C 9 2, 7 3.5, 7 5 L 7 6 L 17 6 L 17 5 C 17 3.5, 15 2, 12 2 Z"/>
-                <path d="M 8 6 L 6 10 C 6 10, 5.5 13, 5.5 15 C 5.5 17, 6 18, 7 19 L 17 19 C 18 18, 18.5 17, 18.5 15 C 18.5 13, 18 10, 18 10 L 16 6 Z"/>
-                <path d="M 12 10 C 12 10, 10.5 12, 10.5 14 C 10.5 15.5, 11.2 16.5, 12 16.5 C 12.8 16.5, 13.5 15.5, 13.5 14 C 13.5 12, 12 10, 12 10 Z"/>
-                <path d="M 12 11.5 C 12 11.5, 11.2 12.8, 11.2 13.8 C 11.2 14.5, 11.5 15, 12 15 C 12.5 15, 12.8 14.5, 12.8 13.8 C 12.8 12.8, 12 11.5, 12 11.5 Z"/>
-                <rect x="7" y="19" width="10" height="3" rx="1"/>
-                <circle cx="18.5" cy="20.5" r="1"/>
-                <line x1="17.5" y1="20.5" x2="19.5" y2="20.5"/>
-            </svg>
-        </div>
-    `);
-    button.on('click', onLanternClick);
-    
-    $('#rightSendForm').prepend(button);
-    
-    log("Lantern button added");
-}
-
-// Create sidebar panel
-function createSidebar() {
-    // Check if sidebar is currently open before removing
-    const wasOpen = $('#ghostfinder_sidebar').hasClass('ghostfinder_open');
-    
-    // Remove existing sidebar if any
-    $('#ghostfinder_sidebar').remove();
-    
-    const findEnd = extension_settings[extensionName].findEnd;
-    const headerText = findEnd ? 'Last Messages Before Hidden' : 'First Messages After Hidden';
-    
-    const sidebar = $(`
-        <div id="ghostfinder_sidebar" class="ghostfinder_sidebar ${wasOpen ? 'ghostfinder_open' : ''}">
-            <div class="ghostfinder_sidebar_header">
-                <div>
-                    <h3>Boundary Messages</h3>
-                    <small class="ghostfinder_mode_text">${headerText}</small>
-                </div>
-                <div class="ghostfinder_sidebar_controls">
-                    <div id="ghostfinder_sidebar_refresh" class="fa-solid fa-rotate interactable" title="Refresh"></div>
-                    <div id="ghostfinder_sidebar_close" class="fa-solid fa-circle-xmark interactable" title="Close"></div>
-                </div>
-            </div>
-            <div id="ghostfinder_sidebar_list" class="ghostfinder_sidebar_list"></div>
-        </div>
-    `);
-    
-    $('body').append(sidebar);
-    
-    $('#ghostfinder_sidebar_close').on('click', closeSidebar);
-    $('#ghostfinder_sidebar_refresh').on('click', updateSidebarPanel);
-    
-    // If it was open, update the panel content
-    if (wasOpen) {
-        updateSidebarPanel();
-    }
-    
-    log("Sidebar created");
-}
-
-// Setup event listeners for chat changes
+// Setup event listeners
 function setupEventListeners() {
-    log("Registering event listeners");
-    
-    // Update when chat changes
     eventSource.on(event_types.CHAT_CHANGED, () => {
-        log("CHAT_CHANGED event");
-        updateSidebarPanel();
+        updatePanel();
+        updateCounterBadge();
     });
     
     eventSource.on(event_types.MESSAGE_RECEIVED, () => {
-        log("MESSAGE_RECEIVED event");
-        updateSidebarPanel();
+        autoHideInstructions();
+        updatePanel();
+        updateCounterBadge();
+    });
+    
+    eventSource.on(event_types.MESSAGE_SENT, () => {
+        autoHideInstructions();
+        updatePanel();
+        updateCounterBadge();
     });
     
     eventSource.on(event_types.MESSAGE_DELETED, () => {
-        log("MESSAGE_DELETED event");
-        updateSidebarPanel();
+        updatePanel();
+        updateCounterBadge();
     });
     
     eventSource.on(event_types.MESSAGE_EDITED, () => {
-        log("MESSAGE_EDITED event");
-        updateSidebarPanel();
+        updatePanel();
+        updateCounterBadge();
     });
     
     eventSource.on(event_types.MESSAGE_UPDATED, () => {
-        log("MESSAGE_UPDATED event");
-        updateSidebarPanel();
-    });
-    
-    eventSource.on(event_types.MESSAGE_SWIPED, () => {
-        log("MESSAGE_SWIPED event");
-        updateSidebarPanel();
+        updatePanel();
+        updateCounterBadge();
     });
     
     eventSource.on(event_types.CHAT_UPDATED, () => {
-        log("CHAT_UPDATED event");
-        updateSidebarPanel();
+        updatePanel();
+        updateCounterBadge();
     });
 }
 
-// Add MutationObserver to detect hide/unhide operations
-function setupHideUnhideObserver() {
+// Setup mutation observer for hide/unhide
+function setupHideObserver() {
     const chatContainer = document.getElementById('chat');
-    if (!chatContainer) {
-        log("Chat container not found for observer");
-        return;
-    }
+    if (!chatContainer) return;
     
-    // Debounce the update to avoid excessive calls
     let updateTimeout;
     const debouncedUpdate = () => {
         clearTimeout(updateTimeout);
         updateTimeout = setTimeout(() => {
-            log("Detected hide/unhide operation");
-            updateSidebarPanel();
+            updatePanel();
+            updateCounterBadge();
         }, 100);
     };
     
     const observer = new MutationObserver((mutations) => {
         for (const mutation of mutations) {
-            // Check if is_system attribute changed on any message
             if (mutation.type === 'attributes' && 
                 mutation.attributeName === 'is_system' &&
                 mutation.target.classList.contains('mes')) {
@@ -410,67 +454,19 @@ function setupHideUnhideObserver() {
         attributeFilter: ['is_system'],
         subtree: true
     });
-    
-    log("Hide/unhide observer started");
 }
 
-// Handle enabled toggle
-function onEnabledChange(event) {
+// Handle auto-hide toggle
+function onAutoHideChange(event) {
     const value = Boolean($(event.target).prop("checked"));
-    extension_settings[extensionName].enabled = value;
+    extension_settings[MODULE_NAME].autoHide = value;
     saveSettingsDebounced();
-    info(`Extension ${value ? 'enabled' : 'disabled'}`);
-    
-    addLanternButton();
-    addExtensionsMenuButton();
-    createSidebar();
+    console.log(`[${MODULE_NAME}] Auto-hide ${value ? 'enabled' : 'disabled'}`);
 }
 
-// Handle show index toggle
-function onShowIndexChange(event) {
-    const value = Boolean($(event.target).prop("checked"));
-    extension_settings[extensionName].showIndex = value;
-    saveSettingsDebounced();
-    info(`Show index panel ${value ? 'enabled' : 'disabled'}`);
-    
-    createSidebar();
-    
-    // Update button tooltip
-    if (value) {
-        $('#ghostfinder_button').attr('title', 'Show boundary index');
-    } else {
-        const findEnd = extension_settings[extensionName].findEnd;
-        const tooltipText = findEnd ? 'Find last message before hidden sections' : 'Find previous boundary';
-        $('#ghostfinder_button').attr('title', tooltipText);
-    }
-}
-
-// Handle find end toggle
-function onFindEndChange(event) {
-    const value = Boolean($(event.target).prop("checked"));
-    extension_settings[extensionName].findEnd = value;
-    saveSettingsDebounced();
-    info(`Find end mode ${value ? 'enabled' : 'disabled'}`);
-    
-    updateSidebarPanel();
-    createSidebar();
-    
-    // Update button tooltip
-    const tooltipText = value ? 'Find last message before hidden sections' : 'Find previous boundary';
-    $('#ghostfinder_button').attr('title', tooltipText);
-}
-
-// Handle debug mode toggle
-function onDebugModeChange(event) {
-    const value = Boolean($(event.target).prop("checked"));
-    extension_settings[extensionName].debugMode = value;
-    saveSettingsDebounced();
-    info(`Debug mode ${value ? 'enabled' : 'disabled'}`);
-}
-
-// Initialize the extension
+// Initialize extension
 async function init() {
-    info("Initializing...");
+    console.log(`[${MODULE_NAME}] Initializing...`);
     
     loadSettings();
     
@@ -479,37 +475,25 @@ async function init() {
         const settingsHtml = await $.get(`${extensionFolderPath}/settings.html`);
         $("#extensions_settings2").append(settingsHtml);
         
-        // Bind event handlers
-        $("#ghostfinder_enabled").on("change", onEnabledChange);
-        $("#ghostfinder_show_index").on("change", onShowIndexChange);
-        $("#ghostfinder_find_end").on("change", onFindEndChange);
-        $("#ghostfinder_debug").on("change", onDebugModeChange);
-        
-        // Update checkbox states
-        $("#ghostfinder_enabled").prop("checked", extension_settings[extensionName].enabled);
-        $("#ghostfinder_show_index").prop("checked", extension_settings[extensionName].showIndex);
-        $("#ghostfinder_find_end").prop("checked", extension_settings[extensionName].findEnd);
-        $("#ghostfinder_debug").prop("checked", extension_settings[extensionName].debugMode);
-        
-        log("Settings UI loaded");
+        $("#ct_imc_auto_hide").on("change", onAutoHideChange);
+        $("#ct_imc_auto_hide").prop("checked", extension_settings[MODULE_NAME].autoHide || false);
     } catch (error) {
-        console.error(`[${extensionDisplayName}] Failed to load settings UI:`, error);
+        console.error(`[${MODULE_NAME}] Failed to load settings:`, error);
     }
     
-    // Wait a bit for ST to load UI elements
+    // Wait for UI to load
     await new Promise(resolve => setTimeout(resolve, 1000));
     
-    // Set up components
-    addLanternButton();
-    addExtensionsMenuButton();
-    createSidebar();
+    createTrigger();
+    createPanel();
     setupEventListeners();
-    setupHideUnhideObserver();
+    setupHideObserver();
+    updateCounterBadge();
     
-    log("Initialization complete");
+    console.log(`[${MODULE_NAME}] Initialized`);
 }
 
-// Register the extension
+// Register extension
 jQuery(async () => {
     await init();
 });

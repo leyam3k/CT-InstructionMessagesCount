@@ -1,93 +1,114 @@
-# Ghostfinder
+# CT-InstructionMessagesCount
 
-A SillyTavern extension that helps you navigate between "boundary messages" - the first unhidden messages that appear after hidden or system messages in your chat.
-
-## What are Boundary Messages?
-
-When you hide messages in SillyTavern (system messages, OOC messages, swipes, etc.), "boundary messages" are the first visible messages that come after those hidden sections. Ghostfinder helps you quickly navigate to these boundaries, making it easy to jump between different conversation segments.
-
-## Why Ghostfinder?
-
-Hidden messages are denoted with a ghost icon. I thought a ghostfinding lantern would be cute. 👻
+A SillyTavern/CozyTavern extension that helps track and manage instruction messages in your chat. It provides awareness of active instruction messages and tools to navigate and manage them efficiently.
 
 ## Features
 
-### 🕯️ Lantern Button
+### 📊 Counter Badge
+- Displays active/total instruction messages in format `x/x` (e.g., `1/5`)
+- Shows 1 active instruction out of 5 total instructions
+- Updates automatically as messages are added, hidden, or deleted
 
-A lantern button appears in your chat interface. **By default**, clicking it will:
+### 📌 Keep Instructions
+- Pin important instructions to prevent auto-hiding
+- Kept instructions are automatically unhidden if they were hidden
+- Persistent per-chat storage using message content hash
+- Survives message deletions and reordering
 
-1. **Jump to previous boundary** - Scrolls to the most recent boundary message before your current position
-2. **Click again** to find earlier boundaries - Each click takes you to the next boundary up in the conversation
-3. **Pagination aware** - If there are boundaries in messages that aren't loaded yet, the button will scroll to the top of the chat so you can click "Show More Messages" to load them
+### 🧭 Navigation
+- Click any instruction in the list to navigate to it
+- Smooth scrolling with highlight animation
+- Pagination-aware: notifies if message needs to be loaded first
 
-### 👻 Boundary Index Panel
+### 🎯 Auto-Hide Feature
+- Automatically hide instructions that are no longer second-to-last message
+- Excludes kept instructions from auto-hiding
+- Optional: can be toggled in settings
 
-Access the panel via:
-- **Extensions menu** - Click the "Show Boundary Index" button (always available)
-- **Lantern button** - Enable "Lantern Button Opens Panel" in settings to change the lantern button's behaviour
-
-The panel features:
-- **Complete list** of all boundary messages in the current chat (including unloaded messages beyond pagination)
-- **Click any message number** to jump directly to that boundary
-- **Refresh button** to manually update the list after hide/unhide operations
-- **Auto-updates** when messages are added, deleted, edited, or hidden/unhidden (for loaded messages)
-- Panel stays open while you navigate, making it easy to jump between multiple boundaries
+### 🔧 Force Hide
+- Manually hide all old non-kept instructions at once
+- Useful for cleaning up after a conversation segment
 
 ## Installation
 
 1. Open SillyTavern
 2. Go to Extensions → Install Extension
-3. Paste the GitHub URL: `https://github.com/sakanomichi/SillyTavern-Ghostfinder`
+3. Paste the GitHub URL: `https://github.com/leyam3k/CT-InstructionMessagesCount`
 4. Refresh the page
 
 Or manually place the extension folder in:
 ```
-public/scripts/extensions/third-party/SillyTavern-Ghostfinder/
+public/scripts/extensions/third-party/CT-InstructionMessagesCount/
 ```
 
-## Settings
+## Usage
 
-Find Ghostfinder in the Extensions panel (right sidebar):
+### Counter Button
+- Located in the left send form area
+- Shows badge with active/total count (e.g., `1/5`)
+- Click to open the instruction messages panel
 
-- **Show Lantern Button** - Display the lantern button in the chat interface (on by default)
-- **Lantern Button Opens Panel** - When enabled, clicking the lantern button opens the Boundary Index Panel. When disabled, clicking jumps to the previous boundary (off by default)
-- **Find End of Sections** - Find the last visible message before each hidden section, instead of the first visible message after each hidden section (off by default)
-- **Enable Debug Logging** - Shows detailed information in the browser console for troubleshooting (off by default)
+### Instruction Panel
+- **Message List**: Shows all instruction messages with:
+  - Message number (e.g., `#6`)
+  - Content preview (first 60 characters)
+  - Hidden status (grayed out with strikethrough)
+- **Keep Button** (📌): Pin/unpin instruction to prevent auto-hiding
+- **Navigate Button** (➤): Jump to the message in chat
+- **Force Hide Button** (👁️‍🗨️): Hide all old non-kept instructions
+- **Refresh Button** (🔄): Manually update the list
 
-**Note:** The Boundary Index Panel is always accessible via the Extensions menu, regardless of these settings.
+### Settings
+Find CT-InstructionMessagesCount in the Extensions panel:
+
+- **Auto-hide Old Instructions**: Automatically hide instructions that are no longer at least second to the last message (excludes kept instructions)
+
+## What are Instruction Messages?
+
+Instruction messages are system messages with the name "Instruction" (case-insensitive). They are commonly used for:
+- Temporary one-time instructions
+- Scene directions
+- OOC guidance
+- Narrative instructions
+
+These messages are typically hidden after use to prevent redundancy in the LLM context.
+
+## How Keep Works
+
+The "Keep" feature uses a unique hash based on message content and timestamp to track instructions across:
+- Message deletions
+- Message reordering
+- Chat reloads
+
+Kept instructions are:
+- Immune to auto-hiding
+- Automatically unhidden when marked as kept
+- Stored per-chat in extension settings
 
 ## Use Cases
 
-- Quickly jump back to the last hidden message in your conversation
-- Find any hidden messages you missed deeper or earlier in the chat
-- Navigate back to boundary points after using `/hide` or `/unhide` commands on a range of messages
-- Review all conversation segments at a glance using the panel
-- Efficiently navigate long roleplays with many hidden system messages or swipes
+- Track how many active instructions are in your current context
+- Quickly navigate between instruction messages
+- Keep important recurring instructions visible
+- Clean up old instructions with one click
+- Prevent accidental hiding of important instructions
 
 ## Troubleshooting
 
 If the extension isn't working:
 
-1. Open the browser console (F12) and look for `[Ghostfinder]` messages
-2. Enable debug logging in the extension settings
-3. Verify all files are in the correct directory
-4. Try clearing your browser cache
+1. Check browser console (F12) for `[CT-InstructionMessagesCount]` messages
+2. Verify all files are in the correct directory
+3. Try refreshing the page
+4. Check that instruction messages have the name "Instruction"
 
 ## Tips
 
-- Use the **refresh button** in the panel after hiding/unhiding messages beyond pagination
-- Access the panel from the **Extensions menu** even when the lantern button is hidden
-- The panel shows **all** boundaries (even unloaded ones), while the lantern button navigates through loaded boundaries
-- Enable **debug logging** to see detailed information about boundary detection and navigation
-
-## Credits
-
-Created by sakanomichi using tools created by Chai/Ultraviolenc!
-
-## Changelog
-
-See [CHANGELOG.md](CHANGELOG.md) for version history and detailed changes.
+- Use the **Keep** button for instructions you want to reference multiple times
+- The **Force Hide** button is useful after completing a conversation segment
+- The counter badge helps you stay aware of context usage
+- Kept instructions persist across chat sessions
 
 ## License
 
-GPL-3.0 - See [LICENSE](LICENSE) file for details.
+MIT
