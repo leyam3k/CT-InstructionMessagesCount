@@ -34,6 +34,7 @@
     pointer-events: none;
     transition: 200ms;
     white-space: nowrap;
+    opacity: 0.7;
 }
 
 .ct-imc-trigger:hover::after {
@@ -93,7 +94,7 @@
     cursor: pointer;
     font-size: 0.9rem;
     opacity: 0.7;
-    transition: opacity 0.2s, color 0.2s;
+    transition: opacity 200ms, color 200ms;
     color: var(--SmartThemeQuoteColor);
 }
 
@@ -103,10 +104,6 @@
 
 #ct_imc_force_hide:hover {
     color: var(--SmartThemeQuoteColor);
-}
-
-#ct_imc_close:hover {
-    color: var(--crimson70a);
 }
 
 /* List */
@@ -134,17 +131,13 @@
     margin: 0.2rem 0;
     cursor: pointer;
     border-radius: 4px;
-    background: var(--black50a);
-    transition: background 0.2s, opacity 0.2s;
+    background: var(--black30a);
+    transition: background 200ms, opacity 200ms;
     gap: 0.4rem;
 }
 
 .ct-imc-item:hover {
-    background: var(--SmartThemeBorderColor);
-}
-
-.ct-imc-item.ct-imc-hidden {
-    opacity: 0.5;
+    background: var(--black50a);
 }
 
 .ct-imc-item.ct-imc-hidden .ct-imc-message-number {
@@ -188,17 +181,20 @@
     cursor: pointer;
     padding: 0.3rem;
     border-radius: 3px;
-    background: var(--black30a);
-    transition: background 0.2s, color 0.2s;
+    background: var(--black50a);
+    transition: opacity 200ms, background 200ms;
     display: flex;
     align-items: center;
     justify-content: center;
     width: 1.6rem;
     height: 1.6rem;
     font-size: 0.85em;
+    opacity: 0.8;
+    color: var(--SmartThemeQuoteColor);
 }
 
 .ct-imc-btn:hover {
+    opacity: 1;
     background: var(--SmartThemeBorderColor);
 }
 

@@ -358,12 +358,10 @@ function createPanel() {
             <div class="ct-imc-header">
                 <h3>Instruction Messages</h3>
                 <div class="ct-imc-controls">
-                    <div id="ct_imc_force_hide" class="fa-solid fa-eye-slash interactable" 
+                    <div id="ct_imc_force_hide" class="fa-solid fa-eye-slash interactable"
                          title="Force hide old instructions"></div>
-                    <div id="ct_imc_refresh" class="fa-solid fa-rotate interactable" 
+                    <div id="ct_imc_refresh" class="fa-solid fa-rotate interactable"
                          title="Refresh"></div>
-                    <div id="ct_imc_close" class="fa-solid fa-circle-xmark interactable" 
-                         title="Close"></div>
                 </div>
             </div>
             <div id="ct_imc_list" class="ct-imc-list"></div>
@@ -372,7 +370,6 @@ function createPanel() {
     
     $('body').append(panel);
     
-    $('#ct_imc_close').on('click', closePanel);
     $('#ct_imc_refresh').on('click', updatePanel);
     $('#ct_imc_force_hide').on('click', forceHideInstructions);
     
