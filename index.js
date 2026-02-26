@@ -221,6 +221,8 @@ async function handleKeepToggle(messageIndex) {
         await saveChatConditional();
     }
     
+    // Update the message-level keep button appearance
+    updateMessageKeepButton(messageIndex);
     updatePanel();
 }
 
@@ -308,6 +310,70 @@ function updatePanel() {
     updateCounterBadge();
 }
 
+// Update message-level keep button appearance
+function updateMessageKeepButton(messageIndex) {
+    const context = getContext();
+    const message = context.chat[messageIndex];
+    if (!message) return;
+    
+    const isKept = isInstructionKept(message);
+    const messageBlock = $(`.mes[mesid="${messageIndex}"]`);
+    const keepBtn = messageBlock.find('.ct-imc-msg-keep-btn');
+    
+    if (keepBtn.length) {
+        if (isKept) {
+            keepBtn.addClass('ct-imc-msg-kept');
+            keepBtn.attr('title', 'Unkeep instruction');
+        } else {
+            keepBtn.removeClass('ct-imc-msg-kept');
+            keepBtn.attr('title', 'Keep instruction');
+        }
+    }
+}
+
+// Add keep buttons to all instruction messages
+function addKeepButtonsToInstructions() {
+    $('#chat .mes').each(function() {
+        const mes = $(this);
+        const mesId = parseInt(mes.attr('mesid'), 10);
+        if (isNaN(mesId)) return;
+        
+        const context = getContext();
+        const message = context.chat[mesId];
+        if (!message) return;
+        
+        const chName = message.name || '';
+        
+        // Only add to instruction messages
+        if (chName.toLowerCase() !== 'instruction') return;
+        
+        // Prevent duplicate buttons
+        if (mes.find('.ct-imc-msg-keep-btn').length > 0) return;
+        
+        const extraButtons = mes.find('.extraMesButtons');
+        if (extraButtons.length > 0) {
+            const isKept = isInstructionKept(message);
+            
+            // Create keep button
+            const btn = document.createElement('div');
+            btn.classList.add('mes_button');
+            btn.classList.add('ct-imc-msg-keep-btn');
+            btn.classList.add('fa-solid');
+            btn.classList.add('fa-thumbtack');
+            btn.classList.add('interactable');
+            if (isKept) {
+                btn.classList.add('ct-imc-msg-kept');
+            }
+            btn.title = isKept ? 'Unkeep instruction' : 'Keep instruction';
+            btn.setAttribute('tabindex', '0');
+            btn.setAttribute('role', 'button');
+            
+            // Insert at the beginning (left side) of extraMesButtons
+            extraButtons[0].insertBefore(btn, extraButtons[0].firstChild);
+        }
+    });
+}
+
 // Toggle panel
 function togglePanel() {
     const panel = $('#ct_imc_panel');
@@ -383,19 +449,31 @@ function createPanel() {
 
 // Setup event listeners
 function setupEventListeners() {
+    // Delegated click listener for message-level keep buttons
+    $('#chat').on('click', '.ct-imc-msg-keep-btn', async function(e) {
+        e.stopPropagation();
+        const mesId = parseInt($(this).closest('.mes').attr('mesid'), 10);
+        if (!isNaN(mesId)) {
+            await handleKeepToggle(mesId);
+        }
+    });
+    
     eventSource.on(event_types.CHAT_CHANGED, () => {
+        addKeepButtonsToInstructions();
         updatePanel();
         updateCounterBadge();
     });
     
     eventSource.on(event_types.MESSAGE_RECEIVED, () => {
         autoHideInstructions();
+        addKeepButtonsToInstructions();
         updatePanel();
         updateCounterBadge();
     });
     
     eventSource.on(event_types.MESSAGE_SENT, () => {
         autoHideInstructions();
+        addKeepButtonsToInstructions();
         updatePanel();
         updateCounterBadge();
     });
@@ -406,19 +484,25 @@ function setupEventListeners() {
     });
     
     eventSource.on(event_types.MESSAGE_EDITED, () => {
+        addKeepButtonsToInstructions();
         updatePanel();
         updateCounterBadge();
     });
     
     eventSource.on(event_types.MESSAGE_UPDATED, () => {
+        addKeepButtonsToInstructions();
         updatePanel();
         updateCounterBadge();
     });
     
     eventSource.on(event_types.CHAT_UPDATED, () => {
+        addKeepButtonsToInstructions();
         updatePanel();
         updateCounterBadge();
     });
+    
+    eventSource.on(event_types.USER_MESSAGE_RENDERED, addKeepButtonsToInstructions);
+    eventSource.on(event_types.CHARACTER_MESSAGE_RENDERED, addKeepButtonsToInstructions);
 }
 
 // Setup mutation observer for hide/unhide
@@ -485,6 +569,7 @@ async function init() {
     createPanel();
     setupEventListeners();
     setupHideObserver();
+    addKeepButtonsToInstructions();
     updateCounterBadge();
     
     console.log(`[${MODULE_NAME}] Initialized`);

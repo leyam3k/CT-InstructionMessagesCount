@@ -226,3 +226,20 @@
         opacity: 1;
     }
 }
+
+/* Message-level keep button styling */
+.ct-imc-msg-keep-btn {
+    display: inline-block;
+    cursor: pointer;
+    opacity: 0.7;
+    transition: opacity 200ms;
+}
+
+.ct-imc-msg-keep-btn:hover {
+    opacity: 1;
+}
+
+.ct-imc-msg-keep-btn.ct-imc-msg-kept {
+    opacity: 1;
+    color: var(--SmartThemeQuoteColor);
+}

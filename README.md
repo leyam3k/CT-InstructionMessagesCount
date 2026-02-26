@@ -14,6 +14,9 @@ A SillyTavern/CozyTavern extension that helps track and manage instruction messa
 - Kept instructions are automatically unhidden if they were hidden
 - Persistent per-chat storage using message content hash
 - Survives message deletions and reordering
+- **Message-level button**: Click the thumbtack button in the message's extra buttons menu (3 dots)
+- **Panel button**: Use the keep button in the instruction messages panel
+- Both buttons sync automatically - keeping via one updates the other
 
 ### 🧭 Navigation
 - Click any instruction in the list to navigate to it
@@ -57,6 +60,12 @@ public/scripts/extensions/third-party/CT-InstructionMessagesCount/
 - **Navigate Button** (➤): Jump to the message in chat
 - **Force Hide Button** (👁️‍🗨️): Hide all old non-kept instructions
 - **Refresh Button** (🔄): Manually update the list
+
+### Message-Level Keep Button
+- Each instruction message has a thumbtack button in its extra buttons menu (click the 3 dots)
+- Click to keep/unkeep the instruction
+- Button opacity is 1 when instruction is kept, 0.7 when not kept
+- Syncs automatically with the panel's keep status
 
 ### Settings
 Find CT-InstructionMessagesCount in the Extensions panel:
