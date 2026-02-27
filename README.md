@@ -32,6 +32,12 @@ A SillyTavern/CozyTavern extension that helps track and manage instruction messa
 - Manually hide all old non-kept instructions at once
 - Useful for cleaning up after a conversation segment
 
+### 🧹 Automatic Cleanup
+- Automatically removes orphaned kept instructions from deleted messages
+- Prevents extension settings bloat from deleted/regenerated messages
+- Runs automatically when messages are deleted or chat changes
+- Keeps storage clean and efficient
+
 ## Installation
 
 1. Open SillyTavern

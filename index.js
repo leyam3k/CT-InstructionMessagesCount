@@ -74,6 +74,44 @@ function toggleKeepInstruction(message) {
     saveSettingsDebounced();
 }
 
+/**
+ * Remove kept instructions for messages that no longer exist in the current chat.
+ * This prevents extension settings bloat from deleted/regenerated messages.
+ */
+function cleanupOrphanedKeptInstructions() {
+    const context = getContext();
+    if (!context.chat || !Array.isArray(context.chat)) return;
+    
+    const chatId = getCurrentChatId();
+    const keptInstructions = extension_settings[MODULE_NAME].keptInstructions[chatId];
+    if (!keptInstructions) return;
+
+    // Build set of valid hashes from current messages
+    const validHashes = new Set();
+    for (const msg of context.chat) {
+        if (!msg || msg.is_user) continue;
+        const chName = (msg.name || '').toLowerCase();
+        if (chName !== 'instruction') continue;
+        
+        const hash = getMessageHash(msg);
+        if (hash) validHashes.add(hash);
+    }
+
+    // Remove kept instructions that don't match any current message
+    let removedCount = 0;
+    for (const hash in keptInstructions) {
+        if (!validHashes.has(hash)) {
+            delete keptInstructions[hash];
+            removedCount++;
+        }
+    }
+
+    if (removedCount > 0) {
+        console.log(`[${MODULE_NAME}] Cleaned up ${removedCount} orphaned kept instruction(s)`);
+        saveSettingsDebounced();
+    }
+}
+
 // Find all instruction messages
 function findInstructionMessages() {
     const context = getContext();
@@ -459,6 +497,7 @@ function setupEventListeners() {
     });
     
     eventSource.on(event_types.CHAT_CHANGED, () => {
+        cleanupOrphanedKeptInstructions();
         addKeepButtonsToInstructions();
         updatePanel();
         updateCounterBadge();
@@ -479,6 +518,7 @@ function setupEventListeners() {
     });
     
     eventSource.on(event_types.MESSAGE_DELETED, () => {
+        cleanupOrphanedKeptInstructions();
         updatePanel();
         updateCounterBadge();
     });
